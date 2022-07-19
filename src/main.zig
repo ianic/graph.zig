@@ -172,3 +172,45 @@ pub fn DiGraph(comptime T: type, allocator: Allocator) type {
         }
     };
 }
+
+pub fn topSort(graph: anytype) type {
+    const n = graph.vertices();
+
+    var ts = struct {
+        const Self = @This();
+
+        visited: []bool = [n]bool ** 0,
+        labels: []usize = [n]usize ** 0,
+        label: usize = n,
+
+        fn topSort(self: *Self) void {
+            var v = 0;
+            while (v < n) {
+                if (!self.visited[v]) {
+                    self.dsf(graph, v);
+                }
+                v += 1;
+            }
+        }
+
+        fn dfs(self: *Self, s: usize) void {
+            self.visited[s] = true;
+            for (self.adj(s)) |v| {
+                if (!self.visited(v)) {
+                    self.dfs(v);
+                }
+            }
+            self.labels[s] = self.label;
+            self.label -= 1;
+        }
+    };
+    ts.topSort();
+
+    return ts;
+}
+
+test "top sort" {
+    var dg = try DiGraph(u8, testing.allocator).read("../testdata", "top_sort.txt");
+    var res = topSort(dg);
+    print("{}", res.labels);
+}
