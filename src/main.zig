@@ -13,55 +13,19 @@ test "basic add functionality" {
     try testing.expect(add(3, 7) == 10);
 }
 
-test "readfile" {
-    var dir = try std.fs.cwd().openDir("../testdata/stanford-algs/testCases/course2/assignment1SCC", .{});
-    var file = try dir.openFile("input_mostlyCycles_1_8.txt", .{});
-    defer file.close();
-
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
-
-    const allocator = testing.allocator;
-    var al = HashMap(usize, ArrayList(usize)).init(allocator);
-
-    var buf: [128]u8 = undefined;
-    while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
-        std.debug.print("{s}\n", .{line});
-        var splits = std.mem.split(u8, line, " ");
-        if (splits.next()) |s1| {
-            var tail = try std.fmt.parseInt(usize, s1, 10);
-            if (splits.next()) |s2| {
-                var head = try std.fmt.parseInt(usize, s2, 10);
-                std.debug.print("{d} -> {d}\n", .{ head, tail });
-
-                if (al.getPtr(tail)) |l| {
-                    try l.append(head);
-                } else {
-                    var l = ArrayList(usize).init(allocator);
-                    try l.append(head);
-                    try al.put(tail, l);
-                }
-            }
-        }
-
-        // if (splits.len() > 1) {
-        //     while (splits.next()) |chunk| {
-        //         var i = std.fmt.parseInt(usize, chunk, 10);
-        //         std.debug.print("\t{s} {d}\n", .{ chunk, i });
-        //     }
-        // }
-    }
-
-    var iterator = al.iterator();
-    while (iterator.next()) |entry| {
-        print("{}", .{entry.value_ptr});
-        entry.value_ptr.deinit();
-    }
-    al.deinit();
+// to show this graph
+// zig test --test-filter read main.zig 2>/dev/null  | dot -Tsvg > out.svg && open out.svg
+test "read digrap" {
+    var dg = try DiGraph(u8).read("../testdata/stanford-algs/testCases/course2/assignment1SCC", "input_mostlyCycles_1_8.txt");
+    var stdout = std.io.getStdOut();
+    try dg.dot(stdout);
+    dg.deinit();
 }
 
-test "readfile 2" {
-    var dg = try DiGraph(u8).read("../testdata/stanford-algs/testCases/course2/assignment1SCC", "input_mostlyCycles_1_8.txt");
+test "read tinyDG" {
+    var dg = try DiGraph(u8).read("../testdata", "tinyDG.txt");
+    var stdout = std.io.getStdOut();
+    try dg.dot(stdout);
     dg.deinit();
 }
 
@@ -106,14 +70,19 @@ pub fn DiGraph(comptime T: type) type {
 
             var buf: [128]u8 = undefined;
             while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
-                std.debug.print("{s}\n", .{line});
                 var splits = std.mem.split(u8, line, " ");
-                if (splits.next()) |s1| {
-                    var tail = try std.fmt.parseInt(T, s1, 10);
-                    if (splits.next()) |s2| {
-                        var head = try std.fmt.parseInt(T, s2, 10);
-                        try dg.addEdge(head, tail);
+                var tail: ?T = null;
+
+                while (splits.next()) |s1| {
+                    if (s1.len == 0 or std.mem.eql(u8, s1, " ")) {
+                        continue;
                     }
+                    if (tail == null) {
+                        tail = try std.fmt.parseInt(T, s1, 10);
+                        continue;
+                    }
+                    var head = try std.fmt.parseInt(T, s1, 10);
+                    try dg.addEdge(head, tail.?);
                 }
             }
 
@@ -131,6 +100,20 @@ pub fn DiGraph(comptime T: type) type {
                 entry.value_ptr.deinit();
             }
             self.adj.deinit();
+        }
+
+        pub fn dot(self: *Self, file: std.fs.File) !void {
+            var writer = file.writer();
+            _ = try writer.write("digraph G {\n");
+
+            var iterator = self.adj.iterator();
+            while (iterator.next()) |entry| {
+                var tail = entry.key_ptr.*;
+                for (entry.value_ptr.items) |head| {
+                    try writer.print("  {d} -> {d};\n", .{ tail, head });
+                }
+            }
+            _ = try writer.write("}\n");
         }
     };
 }
