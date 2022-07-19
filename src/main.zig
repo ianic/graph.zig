@@ -18,32 +18,66 @@ test "basic add functionality" {
 // to show this graph
 // zig test --test-filter read main.zig 2>/dev/null  | dot -Tsvg > out.svg && open out.svg
 test "read digrap" {
-    var dg = try DiGraph(u8).read("../testdata/stanford-algs/testCases/course2/assignment1SCC", "input_mostlyCycles_1_8.txt");
-    try dg.dot(stdout);
+    var dg = try DiGraph(u8, testing.allocator).read("../testdata/stanford-algs/testCases/course2/assignment1SCC", "input_mostlyCycles_1_8.txt");
+    try expectEqual(dg.vertices(), 8);
+    try expectEqual(dg.edges(), 8);
+    //try dg.dot(stdout);
     dg.deinit();
 }
 
 test "read tinyDG" {
-    var dg = try DiGraph(u8).read("../testdata", "tinyDG.txt");
-    try expectEqual(dg.verticles(), 13);
+    var dg = try DiGraph(u8, testing.allocator).read("../testdata", "tinyDG.txt");
+    try expectEqual(dg.vertices(), 13);
     try expectEqual(dg.edges(), 22);
-    try dg.dot(stdout);
+    var str = ArrayList(u8).init(testing.allocator);
+    try dg.dot(str.writer());
+    //print("{s}", .{str.items});
+    const expected =
+        \\digraph G {
+        \\  4 -> 2;
+        \\  4 -> 3;
+        \\  2 -> 3;
+        \\  2 -> 0;
+        \\  3 -> 2;
+        \\  3 -> 5;
+        \\  6 -> 0;
+        \\  6 -> 8;
+        \\  6 -> 4;
+        \\  6 -> 9;
+        \\  0 -> 1;
+        \\  0 -> 5;
+        \\  11 -> 12;
+        \\  11 -> 4;
+        \\  12 -> 9;
+        \\  9 -> 10;
+        \\  9 -> 11;
+        \\  7 -> 9;
+        \\  7 -> 6;
+        \\  10 -> 12;
+        \\  8 -> 6;
+        \\  5 -> 4;
+        \\}
+        \\
+    ;
+    try testing.expectEqualStrings(expected, str.items);
     dg.deinit();
+    str.deinit();
 }
 
-pub fn DiGraph(comptime T: type) type {
+// create DiGraph with T as vertices type
+pub fn DiGraph(comptime T: type, allocator: Allocator) type {
     return struct {
         const Map = HashMap(T, ArrayList(T));
         const Self = @This();
-        allocator: Allocator,
+        allocator: Allocator = allocator,
 
-        adj: Map, // adjacency list
-        e: usize, // number of edges
+        adj: Map = HashMap(T, ArrayList(T)).init(allocator), // adjacency list
+        e: usize = 0, // number of edges
         min_v: T = std.math.maxInt(T), // index of the min verticle
         max_v: T = std.math.minInt(T), // index of the max verticle
         // so vertices can be enumerated with starting 0 or 1 (or any other number as long as they are continuous)
 
-        pub fn verticles(self: *Self) usize {
+        pub fn vertices(self: *Self) usize {
             return @intCast(usize, self.max_v - self.min_v) + 1;
         }
 
@@ -59,13 +93,9 @@ pub fn DiGraph(comptime T: type) type {
             var buf_reader = std.io.bufferedReader(file.reader());
             var in_stream = buf_reader.reader();
 
-            const allocator = testing.allocator;
+            //const allocator = testing.allocator;
 
-            var dg: Self = Self{
-                .e = 0,
-                .allocator = allocator,
-                .adj = HashMap(T, ArrayList(T)).init(allocator),
-            };
+            var dg = Self{};
 
             var buf: [128]u8 = undefined;
             while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
@@ -101,8 +131,7 @@ pub fn DiGraph(comptime T: type) type {
             self.adj.deinit();
         }
 
-        pub fn dot(self: *Self, file: std.fs.File) !void {
-            var writer = file.writer();
+        pub fn dot(self: *Self, writer: anytype) !void {
             _ = try writer.write("digraph G {\n");
 
             var iterator = self.adj.iterator();
