@@ -4,6 +4,8 @@ const ArrayList = std.ArrayList;
 const HashMap = std.AutoArrayHashMap;
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
+const expectEqual = std.testing.expectEqual;
+const stdout = std.io.getStdOut();
 
 export fn add(a: i32, b: i32) i32 {
     return a + b;
@@ -17,14 +19,14 @@ test "basic add functionality" {
 // zig test --test-filter read main.zig 2>/dev/null  | dot -Tsvg > out.svg && open out.svg
 test "read digrap" {
     var dg = try DiGraph(u8).read("../testdata/stanford-algs/testCases/course2/assignment1SCC", "input_mostlyCycles_1_8.txt");
-    var stdout = std.io.getStdOut();
     try dg.dot(stdout);
     dg.deinit();
 }
 
 test "read tinyDG" {
     var dg = try DiGraph(u8).read("../testdata", "tinyDG.txt");
-    var stdout = std.io.getStdOut();
+    try expectEqual(dg.verticles(), 13);
+    try expectEqual(dg.edges(), 22);
     try dg.dot(stdout);
     dg.deinit();
 }
@@ -33,22 +35,20 @@ pub fn DiGraph(comptime T: type) type {
     return struct {
         const Map = HashMap(T, ArrayList(T));
         const Self = @This();
-
-        adj: Map, // adjacency list
-        v: usize, // number of vertices
-        e: usize, // number of edges
         allocator: Allocator,
 
-        fn addEdge(self: *Self, head: T, tail: T) !void {
-            if (self.adj.getPtr(tail)) |l| {
-                try l.append(head);
-                self.v += 1;
-            } else {
-                var l = ArrayList(T).init(self.allocator);
-                try l.append(head);
-                try self.adj.put(tail, l);
-            }
-            self.e += 1;
+        adj: Map, // adjacency list
+        e: usize, // number of edges
+        min_v: T = std.math.maxInt(T), // index of the min verticle
+        max_v: T = std.math.minInt(T), // index of the max verticle
+        // so vertices can be enumerated with starting 0 or 1 (or any other number as long as they are continuous)
+
+        pub fn verticles(self: *Self) usize {
+            return @intCast(usize, self.max_v - self.min_v) + 1;
+        }
+
+        pub fn edges(self: *Self) usize {
+            return @intCast(usize, self.e);
         }
 
         pub fn read(path: []const u8, filename: []const u8) !Self {
@@ -62,7 +62,6 @@ pub fn DiGraph(comptime T: type) type {
             const allocator = testing.allocator;
 
             var dg: Self = Self{
-                .v = 0,
                 .e = 0,
                 .allocator = allocator,
                 .adj = HashMap(T, ArrayList(T)).init(allocator),
@@ -70,10 +69,10 @@ pub fn DiGraph(comptime T: type) type {
 
             var buf: [128]u8 = undefined;
             while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
-                var splits = std.mem.split(u8, line, " ");
+                var parts = std.mem.split(u8, line, " ");
                 var tail: ?T = null;
 
-                while (splits.next()) |s1| {
+                while (parts.next()) |s1| {
                     if (s1.len == 0 or std.mem.eql(u8, s1, " ")) {
                         continue;
                     }
@@ -114,6 +113,33 @@ pub fn DiGraph(comptime T: type) type {
                 }
             }
             _ = try writer.write("}\n");
+        }
+
+        fn addEdge(self: *Self, head: T, tail: T) !void {
+            if (self.adj.getPtr(tail)) |l| {
+                try l.append(head);
+            } else {
+                var l = ArrayList(T).init(self.allocator);
+                try l.append(head);
+                try self.adj.put(tail, l);
+            }
+            self.min_v = min(self.min_v, min(head, tail));
+            self.max_v = max(self.max_v, max(head, tail));
+            self.e += 1;
+        }
+
+        fn min(a: T, b: T) T {
+            if (a < b) {
+                return a;
+            }
+            return b;
+        }
+
+        fn max(a: T, b: T) T {
+            if (a > b) {
+                return a;
+            }
+            return b;
         }
     };
 }
