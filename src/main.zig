@@ -1,9 +1,10 @@
 const std = @import("std");
+const mem = std.mem;
 const testing = std.testing;
 const ArrayList = std.ArrayList;
 const HashMap = std.AutoArrayHashMap;
 const print = std.debug.print;
-const Allocator = std.mem.Allocator;
+const Allocator = mem.Allocator;
 const expectEqual = std.testing.expectEqual;
 const stdout = std.io.getStdOut();
 
@@ -18,7 +19,8 @@ test "basic add functionality" {
 // to show this graph
 // zig test --test-filter read main.zig 2>/dev/null  | dot -Tsvg > out.svg && open out.svg
 test "read digrap" {
-    var dg = try DiGraph(u8, testing.allocator).read("../testdata/stanford-algs/testCases/course2/assignment1SCC", "input_mostlyCycles_1_8.txt");
+    var dg = try DiGraph.init(testing.allocator);
+    try dg.read("../testdata/stanford-algs/testCases/course2/assignment1SCC", "input_mostlyCycles_1_8.txt");
     try expectEqual(dg.vertices(), 8);
     try expectEqual(dg.edges(), 8);
     //try dg.dot(stdout);
@@ -26,7 +28,8 @@ test "read digrap" {
 }
 
 test "read tinyDG" {
-    var dg = try DiGraph(u8, testing.allocator).read("../testdata", "tinyDG.txt");
+    var dg = try DiGraph.init(testing.allocator);
+    try dg.read("../testdata", "tinyDG.txt");
     try expectEqual(dg.vertices(), 13);
     try expectEqual(dg.edges(), 22);
     var str = ArrayList(u8).init(testing.allocator);
@@ -64,153 +67,176 @@ test "read tinyDG" {
     str.deinit();
 }
 
-// create DiGraph with T as vertices type
-pub fn DiGraph(comptime T: type, allocator: Allocator) type {
-    return struct {
-        const Map = HashMap(T, ArrayList(T));
-        const Self = @This();
-        allocator: Allocator = allocator,
+const DiGraph = struct {
+    const Self = @This();
+    allocator: Allocator,
 
-        adj: Map = HashMap(T, ArrayList(T)).init(allocator), // adjacency list
-        e: usize = 0, // number of edges
-        min_v: T = std.math.maxInt(T), // index of the min verticle
-        max_v: T = std.math.minInt(T), // index of the max verticle
-        // so vertices can be enumerated with starting 0 or 1 (or any other number as long as they are continuous)
+    adj: HashMap(u32, ArrayList(u32)), // adjacency list
+    e: u32 = 0, // number of edges
+    min_v: u32 = std.math.maxInt(u32), // index of the min verticle
+    max_v: u32 = std.math.minInt(u32), // index of the max verticle
+    // so vertices can be enumerated with starting 0 or 1 (or any other number as long as they are continuous)
 
-        pub fn vertices(self: *Self) usize {
-            return @intCast(usize, self.max_v - self.min_v) + 1;
-        }
+    pub fn init(allocator: Allocator) !Self {
+        return Self{
+            .allocator = allocator,
+            .adj = HashMap(u32, ArrayList(u32)).init(allocator),
+        };
+    }
 
-        pub fn edges(self: *Self) usize {
-            return @intCast(usize, self.e);
-        }
+    pub fn vertices(self: *Self) u32 {
+        return self.max_v - self.min_v + 1;
+    }
 
-        pub fn read(path: []const u8, filename: []const u8) !Self {
-            var dir = try std.fs.cwd().openDir(path, .{});
-            var file = try dir.openFile(filename, .{});
-            defer file.close();
+    pub fn edges(self: *Self) u32 {
+        return self.e;
+    }
 
-            var buf_reader = std.io.bufferedReader(file.reader());
-            var in_stream = buf_reader.reader();
+    pub fn read(self: *Self, path: []const u8, filename: []const u8) !void {
+        var dir = try std.fs.cwd().openDir(path, .{});
+        var file = try dir.openFile(filename, .{});
+        defer file.close();
 
-            //const allocator = testing.allocator;
+        var buf_reader = std.io.bufferedReader(file.reader());
+        var in_stream = buf_reader.reader();
 
-            var dg = Self{};
+        //const allocator = testing.allocator;
 
-            var buf: [128]u8 = undefined;
-            while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
-                var parts = std.mem.split(u8, line, " ");
-                var tail: ?T = null;
+        var buf: [128]u8 = undefined;
+        while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+            var parts = mem.split(u8, line, " ");
+            var tail: ?u32 = null;
 
-                while (parts.next()) |s1| {
-                    if (s1.len == 0 or std.mem.eql(u8, s1, " ")) {
-                        continue;
-                    }
-                    if (tail == null) {
-                        tail = try std.fmt.parseInt(T, s1, 10);
-                        continue;
-                    }
-                    var head = try std.fmt.parseInt(T, s1, 10);
-                    try dg.addEdge(head, tail.?);
+            while (parts.next()) |s1| {
+                if (s1.len == 0 or mem.eql(u8, s1, " ")) {
+                    continue;
                 }
-            }
-
-            return dg;
-        }
-
-        // vertices connected to vertex tail by edges leaving it
-        pub fn adj(self: *Self, tail: T) ?ArrayList(u8) {
-            return self.adj.getPtr(tail);
-        }
-
-        pub fn deinit(self: *Self) void {
-            var iterator = self.adj.iterator();
-            while (iterator.next()) |entry| {
-                entry.value_ptr.deinit();
-            }
-            self.adj.deinit();
-        }
-
-        pub fn dot(self: *Self, writer: anytype) !void {
-            _ = try writer.write("digraph G {\n");
-
-            var iterator = self.adj.iterator();
-            while (iterator.next()) |entry| {
-                var tail = entry.key_ptr.*;
-                for (entry.value_ptr.items) |head| {
-                    try writer.print("  {d} -> {d};\n", .{ tail, head });
+                if (tail == null) {
+                    tail = try std.fmt.parseInt(u32, s1, 10);
+                    continue;
                 }
+                var head = try std.fmt.parseInt(u32, s1, 10);
+                try self.addEdge(head, tail.?);
             }
-            _ = try writer.write("}\n");
         }
+    }
 
-        fn addEdge(self: *Self, head: T, tail: T) !void {
-            if (self.adj.getPtr(tail)) |l| {
-                try l.append(head);
-            } else {
-                var l = ArrayList(T).init(self.allocator);
-                try l.append(head);
-                try self.adj.put(tail, l);
+    // vertices connected to vertex tail by edges leaving it
+    pub fn adjv(self: *Self, tail: u32) ?*ArrayList(u32) {
+        return self.adj.getPtr(tail);
+    }
+
+    pub fn deinit(self: *Self) void {
+        var iterator = self.adj.iterator();
+        while (iterator.next()) |entry| {
+            entry.value_ptr.deinit();
+        }
+        self.adj.deinit();
+    }
+
+    pub fn dot(self: *Self, writer: anytype) !void {
+        _ = try writer.write("digraph G {\n");
+
+        var iterator = self.adj.iterator();
+        while (iterator.next()) |entry| {
+            var tail = entry.key_ptr.*;
+            for (entry.value_ptr.items) |head| {
+                try writer.print("  {d} -> {d};\n", .{ tail, head });
             }
-            self.min_v = min(self.min_v, min(head, tail));
-            self.max_v = max(self.max_v, max(head, tail));
-            self.e += 1;
         }
+        _ = try writer.write("}\n");
+    }
 
-        fn min(a: T, b: T) T {
-            if (a < b) {
-                return a;
+    fn addEdge(self: *Self, head: u32, tail: u32) !void {
+        if (self.adj.getPtr(tail)) |l| {
+            try l.append(head);
+        } else {
+            var l = ArrayList(u32).init(self.allocator);
+            try l.append(head);
+            try self.adj.put(tail, l);
+        }
+        self.min_v = min(self.min_v, min(head, tail));
+        self.max_v = max(self.max_v, max(head, tail));
+        self.e += 1;
+    }
+
+    fn min(a: u32, b: u32) u32 {
+        if (a < b) {
+            return a;
+        }
+        return b;
+    }
+
+    fn max(a: u32, b: u32) u32 {
+        if (a > b) {
+            return a;
+        }
+        return b;
+    }
+};
+
+const TopSort = struct {
+    const Self = @This();
+
+    allocator: Allocator,
+    graph: *DiGraph,
+    visited: []bool,
+    sorted: ArrayList(u32),
+
+    fn init(allocator: Allocator, graph: *DiGraph) !Self {
+        const n = graph.vertices();
+        return Self{
+            .allocator = allocator,
+            .graph = graph,
+            .visited = try allocator.alloc(bool, n),
+            .sorted = try ArrayList(u32).initCapacity(allocator, n),
+        };
+    }
+
+    fn run(self: *Self) []u32 {
+        var n = self.graph.vertices();
+        var v: u32 = 0;
+        while (v < n) {
+            if (!self.visited[v]) {
+                self.dfs(v);
             }
-            return b;
+            v += 1;
         }
+        mem.reverse(u32, self.sorted.items);
+        return self.sorted.toOwnedSlice();
+    }
 
-        fn max(a: T, b: T) T {
-            if (a > b) {
-                return a;
-            }
-            return b;
-        }
-    };
-}
-
-pub fn topSort(graph: anytype) type {
-    const n = graph.vertices();
-
-    var ts = struct {
-        const Self = @This();
-
-        visited: []bool = [n]bool ** 0,
-        labels: []usize = [n]usize ** 0,
-        label: usize = n,
-
-        fn topSort(self: *Self) void {
-            var v = 0;
-            while (v < n) {
+    fn dfs(self: *Self, s: u32) void {
+        self.visited[s] = true;
+        if (self.graph.adjv(s)) |al| {
+            for (al.items) |v| {
                 if (!self.visited[v]) {
-                    self.dsf(graph, v);
-                }
-                v += 1;
-            }
-        }
-
-        fn dfs(self: *Self, s: usize) void {
-            self.visited[s] = true;
-            for (self.adj(s)) |v| {
-                if (!self.visited(v)) {
                     self.dfs(v);
                 }
             }
-            self.labels[s] = self.label;
-            self.label -= 1;
         }
-    };
-    ts.topSort();
+        self.sorted.appendAssumeCapacity(s);
+    }
 
-    return ts;
+    pub fn deinit(self: *Self) void {
+        self.allocator.free(self.visited);
+        self.sorted.deinit();
+    }
+};
+
+pub fn topSort(allocator: Allocator, graph: *DiGraph) ![]u32 {
+    var ts = try TopSort.init(allocator, graph);
+    defer ts.deinit();
+    return ts.run();
 }
 
-test "top sort" {
-    var dg = try DiGraph(u8, testing.allocator).read("../testdata", "top_sort.txt");
-    var res = topSort(dg);
-    print("{}", res.labels);
+test "topSort" {
+    var dg = try DiGraph.init(testing.allocator);
+    try dg.read("../testdata", "top_sort.txt");
+    defer dg.deinit();
+
+    var sorted = try topSort(testing.allocator, &dg);
+    defer testing.allocator.free(sorted);
+
+    try testing.expectEqualSlices(u32, sorted, ([_]u32{ 8, 7, 2, 3, 0, 5, 1, 6, 9, 11, 12, 10, 4 })[0..]);
 }
