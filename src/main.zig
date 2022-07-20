@@ -10,8 +10,7 @@ const stdout = std.io.getStdOut().writer();
 
 // DirectedGraph representation
 // verticles are zero based array 0,1,2,...(v-1)
-//
-const DiGraph = struct {
+const Digraph = struct {
     const Self = @This();
     allocator: Allocator,
 
@@ -90,6 +89,30 @@ const DiGraph = struct {
         return self.adj.getPtr(v);
     }
 
+    pub fn reverse(self: *Self) !Digraph {
+        var r = try Digraph.init(self.allocator);
+        var iterator = self.adj.iterator();
+        while (iterator.next()) |entry| {
+            var tail = entry.key_ptr.*;
+            for (entry.value_ptr.items) |head| {
+                try r.addEdge(tail, head);
+            }
+        }
+        r.v = self.v;
+        return r;
+    }
+
+    pub fn hasEdge(self: *Self, head: u32, tail: u32) bool {
+        if (self.adjacent(head)) |al| {
+            for (al.items) |v| {
+                if (v == tail) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     pub fn deinit(self: *Self) void {
         var iterator = self.adj.iterator();
         while (iterator.next()) |entry| {
@@ -126,7 +149,7 @@ const DiGraph = struct {
 // to show this graph
 // zig test --test-filter read main.zig 2>/dev/null  | dot -Tsvg > out.svg && open out.svg
 test "read digrap one based without header" {
-    var dg = try DiGraph.init(testing.allocator);
+    var dg = try Digraph.init(testing.allocator);
     try dg.read("../testdata/stanford-algs/testCases/course2/assignment1SCC", "input_mostlyCycles_1_8.txt", .{ .base = .one });
     defer dg.deinit();
 
@@ -154,7 +177,7 @@ test "read digrap one based without header" {
 }
 
 test "read tinyDG zero based with header" {
-    var dg = try DiGraph.init(testing.allocator);
+    var dg = try Digraph.init(testing.allocator);
     try dg.read("../testdata", "tinyDG.txt", .{});
     defer dg.deinit();
 
@@ -191,17 +214,22 @@ test "read tinyDG zero based with header" {
         \\
     ;
     try testing.expectEqualStrings(expected, str.items);
+    var r = try dg.reverse();
+    defer r.deinit();
+    try testing.expect(r.hasEdge(1, 0));
+    try testing.expect(!dg.hasEdge(1, 0));
+    //try r.dot(stdout);
 }
 
 const TopSort = struct {
     const Self = @This();
 
     allocator: Allocator,
-    graph: *DiGraph,
+    graph: *Digraph,
     visited: []bool,
     sorted: ArrayList(u32),
 
-    fn init(allocator: Allocator, graph: *DiGraph) !Self {
+    fn init(allocator: Allocator, graph: *Digraph) !Self {
         const n = graph.vertices();
         return Self{
             .allocator = allocator,
@@ -241,14 +269,14 @@ const TopSort = struct {
     }
 };
 
-pub fn topSort(allocator: Allocator, graph: *DiGraph) ![]u32 {
+pub fn topSort(allocator: Allocator, graph: *Digraph) ![]u32 {
     var ts = try TopSort.init(allocator, graph);
     defer ts.deinit();
     return ts.run();
 }
 
 test "topSort" {
-    var dg = try DiGraph.init(testing.allocator);
+    var dg = try Digraph.init(testing.allocator);
     try dg.read("../testdata", "top_sort.txt", .{});
     defer dg.deinit();
 
