@@ -8,6 +8,10 @@ const Allocator = mem.Allocator;
 const expectEqual = std.testing.expectEqual;
 const stdout = std.io.getStdOut().writer();
 
+pub fn sort(comptime T: type, items: []T) void {
+    std.sort.sort(u32, items, {}, comptime std.sort.desc(u32));
+}
+
 // DirectedGraph representation
 // verticles are zero based array 0,1,2,...(v-1)
 const Digraph = struct {
@@ -284,4 +288,136 @@ test "topSort" {
     defer testing.allocator.free(sorted);
 
     try testing.expectEqualSlices(u32, sorted, ([_]u32{ 8, 7, 2, 3, 0, 5, 1, 6, 9, 11, 12, 10, 4 })[0..]);
+}
+
+const Kosaraju = struct {
+    const Self = @This();
+
+    allocator: Allocator,
+    graph: *Digraph,
+    visited: []bool,
+    scc: []u32,
+    num_scc: u32,
+
+    pub fn init(allocator: Allocator, graph: *Digraph) !Self {
+        return Self{
+            .allocator = allocator,
+            .graph = graph,
+            .visited = try allocator.alloc(bool, graph.vertices()),
+            .scc = try allocator.alloc(u32, graph.vertices()),
+            .num_scc = 0,
+        };
+    }
+
+    pub fn run(self: *Self) ![]u32 {
+        var rev = try self.graph.reverse();
+        defer rev.deinit();
+        var order = try topSort(self.allocator, &rev);
+        defer self.allocator.free(order);
+        self.num_scc = 0;
+        for (order) |v| {
+            if (self.visited[v]) {
+                continue;
+            }
+            self.num_scc += 1;
+            self.dfs(v);
+        }
+        return self.scc;
+    }
+
+    fn dfs(self: *Self, s: u32) void {
+        self.visited[s] = true;
+        self.scc[s] = self.num_scc;
+        if (self.graph.adjacent(s)) |al| {
+            for (al.items) |v| {
+                if (!self.visited[v]) {
+                    self.dfs(v);
+                }
+            }
+        }
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.allocator.free(self.visited);
+    }
+};
+
+pub fn kosarju(allocator: Allocator, graph: *Digraph) ![]u32 {
+    var k = try Kosaraju.init(allocator, graph);
+    defer k.deinit();
+    return k.run();
+}
+
+pub fn sccSizes(allocator: Allocator, graph: *Digraph) ![]u32 {
+    var k = try Kosaraju.init(allocator, graph);
+    defer k.deinit();
+    var scc = try k.run();
+    defer allocator.free(scc);
+    var sizes = try allocator.alloc(u32, k.num_scc);
+
+    var i: u32 = 0;
+    while (i < sizes.len) : (i += 1) {
+        sizes[i] = 0;
+    }
+    for (scc) |v| {
+        sizes[v - 1] = sizes[v - 1] + 1;
+    }
+    sort(u32, sizes);
+    return sizes;
+}
+
+test "kosarju" {
+    var dg = try Digraph.init(testing.allocator);
+    try dg.read("../testdata", "scc.txt", .{ .base = .one });
+    defer dg.deinit();
+    var scc = try kosarju(testing.allocator, &dg);
+    defer testing.allocator.free(scc);
+    try testing.expectEqualSlices(u32, scc, ([_]u32{ 4, 3, 4, 3, 4, 1, 3, 1, 3, 1, 2 })[0..]);
+}
+
+test "kosarju with algs testdata" {
+    var dg = try Digraph.init(testing.allocator);
+    try dg.read("../testdata/stanford-algs/testCases/course2/assignment1SCC", "input_mostlyCycles_1_8.txt", .{ .base = .one });
+    defer dg.deinit();
+    var actual = try sccSizes(testing.allocator, &dg);
+    // if (scc.len < 5) {
+    //     var l = scc.len;
+    //     scc = try testing.allocator.realloc(scc, 5);
+    //     while (l < 5) : (l += 1) {
+    //         scc[l] = 0;
+    //     }
+    // }
+    defer testing.allocator.free(actual);
+    //print("scc: {d}\n", .{scc});
+
+    var expected = try readOutputFile(testing.allocator, "../testdata/stanford-algs/testCases/course2/assignment1SCC", "output_mostlyCycles_1_8.txt");
+    defer testing.allocator.free(expected);
+
+    var i: u32 = 0;
+    while (i < expected.len) : (i += 1) {
+        if (expected[i] == 0) {
+            break;
+        }
+        print("{d} == {d}\n", .{ actual[i], expected[i] });
+        try testing.expectEqual(actual[i], expected[i]);
+    }
+    //print("out: {d}\n", .{expected});
+}
+
+pub fn readOutputFile(allocator: Allocator, path: []const u8, filename: []const u8) ![]u32 {
+    var dir = try std.fs.cwd().openDir(path, .{});
+    var file = try dir.openFile(filename, .{});
+    defer file.close();
+
+    const buf_len = 128;
+    const buf = try file.readToEndAlloc(allocator, buf_len);
+    defer allocator.free(buf);
+
+    var iter = mem.split(u8, buf[0 .. buf.len - 1], ",");
+
+    var res = ArrayList(u32).init(allocator);
+    while (iter.next()) |num| {
+        try res.append(try std.fmt.parseInt(u32, num, 10));
+    }
+    return res.toOwnedSlice();
 }
