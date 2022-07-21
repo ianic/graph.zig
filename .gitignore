@@ -9,3 +9,4 @@ zig-out/
 /debug/
 /build/
 /src/out.svg
+/src/flamegraph.svg

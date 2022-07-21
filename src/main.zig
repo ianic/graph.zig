@@ -378,7 +378,7 @@ test "kosarju" {
 test "kosarju with algs testdata" {
     const allocator = testing.allocator;
     const dir = "../testdata/stanford-algs/testCases/course2/assignment1SCC";
-    const input_fn = "input_mostlyCycles_1_8.txt";
+    const input_fn = "input_mostlyCycles_22_200.txt";
     var output_fn = try allocator.alloc(u8, input_fn.len + 1);
     defer allocator.free(output_fn);
     _ = mem.replace(u8, input_fn, "input_", "output_", output_fn);
@@ -398,10 +398,37 @@ test "kosarju with algs testdata" {
         if (expected[i] == 0) {
             break;
         }
-        //print("{d} == {d}\n", .{ actual[i], expected[i] });
         try testing.expectEqual(actual[i], expected[i]);
     }
-    //print("out: {d}\n", .{expected});
+}
+
+test "kosarju all algs testdata" {
+    const allocator = testing.allocator;
+    const dir = "../testdata/stanford-algs/testCases/course2/assignment1SCC";
+    var iter = try TestFilesIterator().init(testing.allocator, dir);
+    defer iter.deinit();
+    while (iter.next()) |fns| {
+        print("{s}  ", .{fns.input});
+        //print("filename3: {s} {s}\n", .{ fns.input, fns.output });
+
+        var dg = try Digraph.init(allocator);
+        try dg.read(dir, fns.input, .{ .base = .one });
+        defer dg.deinit();
+        var actual = try sccSizes(allocator, &dg);
+        defer testing.allocator.free(actual);
+
+        var expected = try readOutputFile(allocator, dir, fns.output);
+        defer testing.allocator.free(expected);
+
+        var i: u32 = 0;
+        while (i < expected.len) : (i += 1) {
+            if (expected[i] == 0) {
+                break;
+            }
+            try testing.expectEqual(actual[i], expected[i]);
+        }
+        print("OK\n", .{});
+    }
 }
 
 pub fn readOutputFile(allocator: Allocator, path: []const u8, filename: []const u8) ![]u32 {
@@ -410,78 +437,30 @@ pub fn readOutputFile(allocator: Allocator, path: []const u8, filename: []const 
     defer file.close();
 
     const buf_len = 128;
-    const buf = try file.readToEndAlloc(allocator, buf_len);
+    var buf = try file.readToEndAlloc(allocator, buf_len);
     defer allocator.free(buf);
+    if (buf[buf.len - 1] == 10) {
+        buf = buf[0 .. buf.len - 1];
+    }
 
-    var iter = mem.split(u8, buf[0 .. buf.len - 1], ",");
+    var iter = mem.split(u8, buf, ",");
 
     var res = ArrayList(u32).init(allocator);
+    defer res.deinit();
     while (iter.next()) |num| {
         try res.append(try std.fmt.parseInt(u32, num, 10));
     }
     return res.toOwnedSlice();
 }
 
-test "iter" {
-    const dir = "../testdata/stanford-algs/testCases/course2/assignment1SCC";
-    var sources = std.fs.IterableDir{
-        .dir = try std.fs.cwd().openDir(dir, .{}),
-    };
-    var iter = sources.iterate();
-    var src = try iter.next();
-    while (src != null) : (src = try iter.next()) {
-        const e = src.?;
-        if (e.kind != std.fs.IterableDir.Entry.Kind.File) {
-            continue;
-        }
-        if (std.mem.indexOf(u8, e.name, "input_")) |_| {
-            print("filename: {s}\n", .{e.name});
-        }
-    }
-}
-
-test "input file names" {
-    const dir = "../testdata/stanford-algs/testCases/course2/assignment1SCC";
-    var list = try inputFilenames(testing.allocator, dir);
-    defer list.deinit();
-    for (list.items) |name| {
-        print("filename2: {s}\n", .{name});
-        testing.allocator.free(name);
-    }
-}
-
-fn inputFilenames(allocator: Allocator, dir: []const u8) !ArrayList([]u8) {
-    var list = ArrayList([]u8).init(allocator);
-
-    var idir = std.fs.IterableDir{
-        .dir = try std.fs.cwd().openDir(dir, .{}),
-    };
-    var iter = idir.iterate();
-    var src = try iter.next();
-    while (src != null) : (src = try iter.next()) {
-        //while (try iter.next()) |src| {
-        const e = src.?;
-        if (e.kind != .File) {
-            continue;
-        }
-        if (std.mem.indexOf(u8, e.name, "input_")) |_| {
-            var path = try std.fs.path.join(allocator, &[_][]const u8{ dir, e.name });
-            //var buf = try allocator.alloc(u8, e.name.len);
-            //std.mem.copy(u8, buf, e.name);
-            try list.append(path);
-        }
-    }
-    return list;
-}
-
-test "input with iterator" {
-    const dir = "../testdata/stanford-algs/testCases/course2/assignment1SCC";
-    var iter = try TestFilesIterator().init(testing.allocator, dir);
-    defer iter.deinit();
-    while (iter.next()) |fns| {
-        print("filename3: {s} {s}\n", .{ fns.input, fns.output });
-    }
-}
+// test "input with iterator" {
+//     const dir = "../testdata/stanford-algs/testCases/course2/assignment1SCC";
+//     var iter = try TestFilesIterator().init(testing.allocator, dir);
+//     defer iter.deinit();
+//     while (iter.next()) |fns| {
+//         print("filename3: {s} {s}\n", .{ fns.input, fns.output });
+//     }
+// }
 
 fn TestFilesIterator() type {
     const Filenames = struct {
@@ -539,10 +518,4 @@ fn TestFilesIterator() type {
             self.idir.close();
         }
     };
-}
-
-fn InputToOutputFilename(allocator: Allocator, input_fn: []const u8) ![]const u8 {
-    var output_fn = try allocator.alloc(u8, input_fn.len + 1);
-    _ = mem.replace(u8, input_fn, "input_", "output_", output_fn);
-    return output_fn;
 }
