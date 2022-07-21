@@ -14,7 +14,7 @@ pub fn sort(comptime T: type, items: []T) void {
 
 // DirectedGraph representation
 // verticles are zero based array 0,1,2,...(v-1)
-const Digraph = struct {
+pub const Digraph = struct {
     const Self = @This();
     allocator: Allocator,
 
@@ -462,7 +462,7 @@ pub fn readOutputFile(allocator: Allocator, path: []const u8, filename: []const 
 //     }
 // }
 
-fn TestFilesIterator() type {
+pub fn TestFilesIterator() type {
     const Filenames = struct {
         input: []const u8,
         output: []const u8,
