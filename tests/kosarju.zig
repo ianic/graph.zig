@@ -4,20 +4,9 @@ const testing = std.testing;
 const graph = @import("graph");
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{
-        //.stack_trace_frames = 4,
-        //.thread_safe = false,
-        //.safety = false,
-    }){};
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-
-    //const allocator = std.heap.page_allocator;
-    //const allocator = std.heap.c_allocator;
-
-    // var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
-    // defer arena.deinit();
-    // const allocator = arena.allocator();
 
     const dir = "./testdata/stanford-algs/testCases/course2/assignment1SCC";
     var iter = try graph.TestFilesIterator().init(allocator, dir);
@@ -41,6 +30,7 @@ pub fn main() !void {
                 break;
             }
             try testing.expectEqual(actual[i], expected[i]);
+            print("{d} ", .{actual[i]});
         }
         print("OK\n", .{});
     }

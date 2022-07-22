@@ -89,8 +89,11 @@ pub const Digraph = struct {
     }
 
     // vertices connected to vertex v by edges leaving v (v is tail, heads are in list)
-    pub fn adjacent(self: *Self, v: u32) ?*ArrayList(u32) {
-        return self.adj.getPtr(v);
+    pub fn adjacent(self: *Self, v: u32) []u32 {
+        if (self.adj.getPtr(v)) |al| {
+            return al.items;
+        }
+        return &[_]u32{};
     }
 
     pub fn reverse(self: *Self) !Digraph {
@@ -107,11 +110,9 @@ pub const Digraph = struct {
     }
 
     pub fn hasEdge(self: *Self, head: u32, tail: u32) bool {
-        if (self.adjacent(head)) |al| {
-            for (al.items) |v| {
-                if (v == tail) {
-                    return true;
-                }
+        for (self.adjacent(head)) |v| {
+            if (v == tail) {
+                return true;
             }
         }
         return false;
@@ -127,7 +128,6 @@ pub const Digraph = struct {
 
     pub fn dot(self: *Self, writer: anytype) !void {
         _ = try writer.write("digraph G {\n");
-
         var iterator = self.adj.iterator();
         while (iterator.next()) |entry| {
             var tail = entry.key_ptr.*;
@@ -257,11 +257,9 @@ const TopSort = struct {
 
     fn dfs(self: *Self, s: u32) void {
         self.visited[s] = true;
-        if (self.graph.adjacent(s)) |al| {
-            for (al.items) |v| {
-                if (!self.visited[v]) {
-                    self.dfs(v);
-                }
+        for (self.graph.adjacent(s)) |v| {
+            if (!self.visited[v]) {
+                self.dfs(v);
             }
         }
         self.sorted.appendAssumeCapacity(s);
@@ -328,11 +326,9 @@ const Kosaraju = struct {
     fn dfs(self: *Self, s: u32) void {
         self.visited[s] = true;
         self.scc[s] = self.num_scc;
-        if (self.graph.adjacent(s)) |al| {
-            for (al.items) |v| {
-                if (!self.visited[v]) {
-                    self.dfs(v);
-                }
+        for (self.graph.adjacent(s)) |v| {
+            if (!self.visited[v]) {
+                self.dfs(v);
             }
         }
     }
