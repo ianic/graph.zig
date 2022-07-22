@@ -7,6 +7,7 @@ const print = std.debug.print;
 const Allocator = mem.Allocator;
 const expectEqual = std.testing.expectEqual;
 const stdout = std.io.getStdOut().writer();
+const builtin = std.builtin;
 
 pub fn sort(comptime T: type, items: []T) void {
     std.sort.sort(u32, items, {}, comptime std.sort.desc(u32));
@@ -150,11 +151,15 @@ pub const Digraph = struct {
     }
 };
 
+fn srcDir() []const u8 {
+    return std.fs.path.dirname(@src().file) orelse ".";
+}
+
 // to show this graph
 // zig test --test-filter read main.zig 2>/dev/null  | dot -Tsvg > out.svg && open out.svg
 test "read digrap one based without header" {
     var dg = try Digraph.init(testing.allocator);
-    try dg.read("../testdata/stanford-algs/testCases/course2/assignment1SCC", "input_mostlyCycles_1_8.txt", .{ .base = .one });
+    try dg.read(srcDir() ++ "/../testdata/stanford-algs/testCases/course2/assignment1SCC", "input_mostlyCycles_1_8.txt", .{ .base = .one });
     defer dg.deinit();
 
     try expectEqual(dg.vertices(), 8);
@@ -182,7 +187,7 @@ test "read digrap one based without header" {
 
 test "read tinyDG zero based with header" {
     var dg = try Digraph.init(testing.allocator);
-    try dg.read("../testdata", "tinyDG.txt", .{});
+    try dg.read(srcDir() ++ "/../testdata", "tinyDG.txt", .{});
     defer dg.deinit();
 
     try expectEqual(dg.vertices(), 13);
@@ -279,7 +284,7 @@ pub fn topSort(allocator: Allocator, graph: *Digraph) ![]u32 {
 
 test "topSort" {
     var dg = try Digraph.init(testing.allocator);
-    try dg.read("../testdata", "top_sort.txt", .{});
+    try dg.read(srcDir() ++ "/../testdata", "top_sort.txt", .{});
     defer dg.deinit();
 
     var sorted = try topSort(testing.allocator, &dg);
@@ -364,7 +369,7 @@ pub fn sccSizes(allocator: Allocator, graph: *Digraph) ![]u32 {
 
 test "kosarju" {
     var dg = try Digraph.init(testing.allocator);
-    try dg.read("../testdata", "scc.txt", .{ .base = .one });
+    try dg.read(srcDir() ++ "/../testdata", "scc.txt", .{ .base = .one });
     defer dg.deinit();
     var scc = try kosarju(testing.allocator, &dg);
     defer testing.allocator.free(scc);
@@ -373,7 +378,7 @@ test "kosarju" {
 
 test "kosarju with algs testdata" {
     const allocator = testing.allocator;
-    const dir = "../testdata/stanford-algs/testCases/course2/assignment1SCC";
+    const dir = srcDir() ++ "/../testdata/stanford-algs/testCases/course2/assignment1SCC";
     const input_fn = "input_mostlyCycles_22_200.txt";
     var output_fn = try allocator.alloc(u8, input_fn.len + 1);
     defer allocator.free(output_fn);
@@ -400,7 +405,7 @@ test "kosarju with algs testdata" {
 
 test "kosarju all algs testdata" {
     const allocator = testing.allocator;
-    const dir = "../testdata/stanford-algs/testCases/course2/assignment1SCC";
+    const dir = srcDir() ++ "/../testdata/stanford-algs/testCases/course2/assignment1SCC";
     var iter = try TestFilesIterator().init(testing.allocator, dir);
     defer iter.deinit();
     while (iter.next()) |fns| {
