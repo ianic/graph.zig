@@ -133,6 +133,36 @@ pub fn FileLineIterator(comptime ReaderType: type) type {
     };
 }
 
+pub fn readDijkstraFile(allocator: Allocator, path: []const u8, filename: []const u8) !WeightedDigraph {
+    var dir = try std.fs.cwd().openDir(path, .{});
+    var file = try dir.openFile(filename, .{});
+    defer file.close();
+    const stream = std.io.bufferedReader(file.reader()).reader();
+    var graph = try WeightedDigraph.init(allocator, 200);
+    var iter = FileLineIterator(@TypeOf(stream)).init(allocator, stream);
+    while (try iter.next()) |line| {
+        var tail: u32 = 0;
+        for (line) |str, n| {
+            if (n == 0) {
+                tail = try std.fmt.parseInt(u32, str, 10);
+            } else {
+                var parts = mem.split(u8, str, ",");
+                if (parts.next()) |str_head| {
+                    var head = try std.fmt.parseInt(u32, str_head, 10);
+                    if (parts.next()) |str_weight| {
+                        var weight = try std.fmt.parseInt(i32, str_weight, 10);
+                        //              print("{d} -> {d} [{d}]", .{ tail, head, weight });
+                        try graph.addEdge(head - 1, tail - 1, weight);
+                    }
+                }
+            }
+            allocator.free(str);
+        }
+        allocator.free(line);
+    }
+    return graph;
+}
+
 test "test cases dir iterator" {
     const dir = srcDir() ++ "/../testdata/stanford-algs/testCases/course2/assignment1SCC";
     var iter = try TestCasesIterator().init(testing.allocator, dir);
@@ -152,37 +182,8 @@ test "read dijkstra file" {
     const path = srcDir() ++ "/../testdata/stanford-algs/testCases/course2/assignment2Dijkstra";
     const filename = "input_random_1_4.txt";
 
-    var dir = try std.fs.cwd().openDir(path, .{});
-    var file = try dir.openFile(filename, .{});
-    defer file.close();
-    const stream = std.io.bufferedReader(file.reader()).reader();
-
-    var graph = try WeightedDigraph.init(allocator, 200);
+    var graph = try readDijkstraFile(allocator, path, filename);
     defer graph.deinit();
-
-    var iter = FileLineIterator(@TypeOf(stream)).init(allocator, stream);
-    while (try iter.next()) |line| {
-        var tail: u32 = 0;
-        for (line) |str, n| {
-            if (n == 0) {
-                tail = try std.fmt.parseInt(u32, str, 10);
-            } else {
-                var parts = mem.split(u8, str, ",");
-                if (parts.next()) |str_head| {
-                    var head = try std.fmt.parseInt(u32, str_head, 10);
-                    if (parts.next()) |str_weight| {
-                        var weight = try std.fmt.parseInt(i32, str_weight, 10);
-                        //              print("{d} -> {d} [{d}]", .{ tail, head, weight });
-                        try graph.addEdge(head - 1, tail - 1, weight);
-                    }
-                }
-            }
-            //print(" {s} {d}", .{ str, n });
-            allocator.free(str);
-        }
-        //print("\n", .{});
-        allocator.free(line);
-    }
 
     var edges = graph.adjacent(190);
     try testing.expectEqual(edges.len, 4);
