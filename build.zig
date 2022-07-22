@@ -22,6 +22,7 @@ pub fn build(b: *std.build.Builder) void {
     }) |name| {
         const t = b.addExecutable(name, "tests/" ++ name ++ ".zig");
         t.addPackagePath("graph", "./src/main.zig");
+        t.addPackagePath("standford", "./src/standford.zig");
         t.setBuildMode(mode);
         t.setTarget(target);
         t.install();

@@ -376,6 +376,8 @@ test "kosarju" {
     try testing.expectEqualSlices(u32, scc, ([_]u32{ 4, 3, 4, 3, 4, 1, 3, 1, 3, 1, 2 })[0..]);
 }
 
+const standford = @import("standford.zig");
+
 test "kosarju with algs testdata" {
     const allocator = testing.allocator;
     const dir = srcDir() ++ "/../testdata/stanford-algs/testCases/course2/assignment1SCC";
@@ -391,7 +393,7 @@ test "kosarju with algs testdata" {
     defer testing.allocator.free(actual);
     //print("scc: {d}\n", .{scc});
 
-    var expected = try readOutputFile(allocator, dir, output_fn);
+    var expected = try standford.readOutputFile(allocator, dir, output_fn);
     defer testing.allocator.free(expected);
 
     var i: u32 = 0;
@@ -404,9 +406,17 @@ test "kosarju with algs testdata" {
 }
 
 test "kosarju all algs testdata" {
+    if (true) {
+        // there is binary tests/kosarju to run this tests in release mode
+        // instead in debug like this one
+        // so use something like:
+        // $ zig build -Drelease-fast=true && time zig-out/bin/kosarju
+        return error.SkipZigTest;
+    }
+
     const allocator = testing.allocator;
     const dir = srcDir() ++ "/../testdata/stanford-algs/testCases/course2/assignment1SCC";
-    var iter = try TestFilesIterator().init(testing.allocator, dir);
+    var iter = try standford.TestCasesIterator().init(testing.allocator, dir);
     defer iter.deinit();
     while (iter.next()) |fns| {
         print("{s}  ", .{fns.input});
@@ -418,7 +428,7 @@ test "kosarju all algs testdata" {
         var actual = try sccSizes(allocator, &dg);
         defer testing.allocator.free(actual);
 
-        var expected = try readOutputFile(allocator, dir, fns.output);
+        var expected = try standford.readOutputFile(allocator, dir, fns.output);
         defer testing.allocator.free(expected);
 
         var i: u32 = 0;
@@ -430,93 +440,4 @@ test "kosarju all algs testdata" {
         }
         print("OK\n", .{});
     }
-}
-
-pub fn readOutputFile(allocator: Allocator, path: []const u8, filename: []const u8) ![]u32 {
-    var dir = try std.fs.cwd().openDir(path, .{});
-    var file = try dir.openFile(filename, .{});
-    defer file.close();
-
-    const buf_len = 128;
-    var buf = try file.readToEndAlloc(allocator, buf_len);
-    defer allocator.free(buf);
-    if (buf[buf.len - 1] == 10) {
-        buf = buf[0 .. buf.len - 1];
-    }
-
-    var iter = mem.split(u8, buf, ",");
-
-    var res = ArrayList(u32).init(allocator);
-    defer res.deinit();
-    while (iter.next()) |num| {
-        try res.append(try std.fmt.parseInt(u32, num, 10));
-    }
-    return res.toOwnedSlice();
-}
-
-// test "input with iterator" {
-//     const dir = "../testdata/stanford-algs/testCases/course2/assignment1SCC";
-//     var iter = try TestFilesIterator().init(testing.allocator, dir);
-//     defer iter.deinit();
-//     while (iter.next()) |fns| {
-//         print("filename3: {s} {s}\n", .{ fns.input, fns.output });
-//     }
-// }
-
-pub fn TestFilesIterator() type {
-    const Filenames = struct {
-        input: []const u8,
-        output: []const u8,
-    };
-
-    return struct {
-        const Self = @This();
-
-        allocator: Allocator,
-        idir: std.fs.IterableDir,
-        iter: std.fs.IterableDir.Iterator,
-        output_fn: []u8,
-
-        pub fn init(allocator: Allocator, dir: []const u8) !Self {
-            const idir = std.fs.IterableDir{
-                .dir = try std.fs.cwd().openDir(dir, .{}),
-            };
-            return Self{
-                .allocator = allocator,
-                .idir = idir,
-                .iter = idir.iterate(),
-                .output_fn = try allocator.alloc(u8, 1024),
-            };
-        }
-
-        pub fn next(self: *Self) ?Filenames {
-            while (true) {
-                var iter_val = self.iter.next() catch null;
-                if (iter_val == null) {
-                    return null;
-                }
-                var entry = iter_val.?;
-                if (entry.kind != .File) {
-                    continue;
-                }
-                if (std.mem.indexOf(u8, entry.name, "input_")) |_| {
-                    const input_fn = entry.name;
-                    var output_fn: []u8 = self.output_fn[0..0];
-                    const n = mem.replace(u8, input_fn, "input_", "output_", self.output_fn);
-                    if (n == 1) {
-                        output_fn = self.output_fn[0 .. input_fn.len + 1];
-                    }
-                    return Filenames{
-                        .input = input_fn,
-                        .output = output_fn,
-                    };
-                }
-            }
-        }
-
-        pub fn deinit(self: *Self) void {
-            self.allocator.free(self.output_fn);
-            self.idir.close();
-        }
-    };
 }

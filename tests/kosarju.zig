@@ -2,6 +2,7 @@ const std = @import("std");
 const print = std.debug.print;
 const testing = std.testing;
 const graph = @import("graph");
+const standford = @import("standford");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -9,7 +10,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const dir = "./testdata/stanford-algs/testCases/course2/assignment1SCC";
-    var iter = try graph.TestFilesIterator().init(allocator, dir);
+    var iter = try standford.TestCasesIterator().init(allocator, dir);
     defer iter.deinit();
     while (iter.next()) |fns| {
         print("{s}  ", .{fns.input});
@@ -21,7 +22,7 @@ pub fn main() !void {
         var actual = try graph.sccSizes(allocator, &dg);
         defer allocator.free(actual);
 
-        var expected = try graph.readOutputFile(allocator, dir, fns.output);
+        var expected = try standford.readOutputFile(allocator, dir, fns.output);
         defer allocator.free(expected);
 
         var i: u32 = 0;
