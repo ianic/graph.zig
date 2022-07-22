@@ -8,6 +8,7 @@ const testing = std.testing;
 const Allocator = mem.Allocator;
 const ArrayList = std.ArrayList;
 const print = std.debug.print;
+const srcDir = @import("testing.zig").srcDir;
 
 pub fn readOutputFile(allocator: Allocator, path: []const u8, filename: []const u8) ![]u32 {
     var dir = try std.fs.cwd().openDir(path, .{});
@@ -101,8 +102,4 @@ test "test cases dir iterator" {
         no_files += 1;
     }
     try testing.expectEqual(no_files, 68);
-}
-
-fn srcDir() []const u8 {
-    return std.fs.path.dirname(@src().file) orelse ".";
 }
