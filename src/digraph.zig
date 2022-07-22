@@ -288,3 +288,100 @@ test "topSort" {
 
     try testing.expectEqualSlices(u32, sorted, ([_]u32{ 8, 7, 2, 3, 0, 5, 1, 6, 9, 11, 12, 10, 4 })[0..]);
 }
+
+pub const WeightedEdge = struct {
+    tail: u32,
+    head: u32,
+    weight: i32,
+};
+
+pub const WeightedDigraph = struct {
+    const Self = @This();
+    allocator: Allocator,
+
+    adj: HashMap(u32, ArrayList(WeightedEdge)), // adjacency list
+    e: u32 = 0, // number of edges
+    v: u32 = 0, // number of vertices
+
+    pub fn init(allocator: Allocator, v: u32) !Self {
+        return Self{
+            .v = v,
+            .allocator = allocator,
+            .adj = HashMap(u32, ArrayList(WeightedEdge)).init(allocator),
+        };
+    }
+
+    pub fn vertices(self: *Self) u32 {
+        return self.v;
+    }
+
+    pub fn edges(self: *Self) u32 {
+        return self.e;
+    }
+
+    // vertices connected to vertex v by edges leaving v (v is tail, heads are in list)
+    pub fn adjacent(self: *Self, v: u32) []WeightedEdge {
+        if (self.adj.getPtr(v)) |al| {
+            return al.items;
+        }
+        return &[_]WeightedEdge{};
+    }
+
+    // pub fn reverse(self: *Self) !Digraph {
+    //     var r = try Digraph.init(self.allocator);
+    //     var iterator = self.adj.iterator();
+    //     while (iterator.next()) |entry| {
+    //         var tail = entry.key_ptr.*;
+    //         for (entry.value_ptr.items) |head| {
+    //             try r.addEdge(tail, head);
+    //         }
+    //     }
+    //     r.v = self.v;
+    //     return r;
+    // }
+
+    pub fn hasEdge(self: *Self, head: u32, tail: u32) bool {
+        for (self.adjacent(head)) |v| {
+            if (v == tail) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn deinit(self: *Self) void {
+        var iterator = self.adj.iterator();
+        while (iterator.next()) |entry| {
+            entry.value_ptr.deinit();
+        }
+        self.adj.deinit();
+    }
+
+    pub fn dot(self: *Self, writer: anytype) !void {
+        _ = try writer.write("digraph G {\n");
+        var iterator = self.adj.iterator();
+        while (iterator.next()) |entry| {
+            var tail = entry.key_ptr.*;
+            for (entry.value_ptr.items) |head| {
+                try writer.print("  {d} -> {d};\n", .{ tail, head });
+            }
+        }
+        _ = try writer.write("}\n");
+    }
+
+    pub fn addEdge(self: *Self, head: u32, tail: u32, weight: i32) !void {
+        const e = WeightedEdge{
+            .head = head,
+            .tail = tail,
+            .weight = weight,
+        };
+        if (self.adj.getPtr(tail)) |l| {
+            try l.append(e);
+        } else {
+            var l = ArrayList(WeightedEdge).init(self.allocator);
+            try l.append(e);
+            try self.adj.put(tail, l);
+        }
+        self.e += 1;
+    }
+};
