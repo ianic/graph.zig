@@ -99,53 +99,6 @@ pub fn TestCasesIterator() type {
     };
 }
 
-pub fn FileLineIterator(comptime ReaderType: type) type {
-    return struct {
-        const Self = @This();
-
-        reader: ReaderType,
-        line: ArrayList([]const u8),
-        word: ArrayList(u8),
-
-        pub fn init(allocator: Allocator, reader: ReaderType) Self {
-            return .{
-                .reader = reader,
-                .line = ArrayList([]const u8).init(allocator),
-                .word = ArrayList(u8).init(allocator),
-            };
-        }
-
-        pub fn next(self: *Self) !?[]const []const u8 {
-            errdefer self.deinit();
-            while (self.reader.readByte() catch null) |chr| {
-                if (std.ascii.isSpace(chr)) {
-                    // end of word
-                    if (self.word.items.len > 0) {
-                        try self.line.append(self.word.toOwnedSlice());
-                    }
-                    if (chr == '\n') {
-                        // end of line
-                        return self.line.toOwnedSlice();
-                    }
-                    continue;
-                }
-                if (std.ascii.isPrint(chr)) {
-                    try self.word.append(chr);
-                }
-            }
-            return null;
-        }
-
-        pub fn deinit(self: *Self) void {
-            for (self.line.items) |w| {
-                self.word.allocator.free(w);
-            }
-            self.word.deinit();
-            self.line.deinit();
-        }
-    };
-}
-
 pub fn readDijkstraFile(allocator: Allocator, path: []const u8) !WeightedDigraph {
     var file = try std.fs.openFileAbsolute(path, .{});
     defer file.close();
