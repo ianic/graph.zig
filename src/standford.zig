@@ -9,8 +9,15 @@ const Allocator = mem.Allocator;
 const ArrayList = std.ArrayList;
 const print = std.debug.print;
 const srcDir = @import("testing.zig").srcDir;
+const assert = std.debug.assert;
+const parseInt = std.fmt.parseInt;
+const max = std.math.max;
+const io = std.io;
+const fs = std.fs;
 
 const WeightedDigraph = @import("digraph.zig").WeightedDigraph;
+const Digraph = @import("digraph.zig").Digraph;
+const wordIterator = @import("word_iterator.zig").wordIterator;
 
 pub fn readOutputFile(allocator: Allocator, path: []const u8, filename: []const u8) ![]u32 {
     var dir = try std.fs.cwd().openDir(path, .{});
@@ -142,30 +149,46 @@ pub fn FileLineIterator(comptime ReaderType: type) type {
 pub fn readDijkstraFile(allocator: Allocator, path: []const u8) !WeightedDigraph {
     var file = try std.fs.openFileAbsolute(path, .{});
     defer file.close();
-    const reader = std.io.bufferedReader(file.reader()).reader();
+    var iter = wordIterator(io.bufferedReader(file.reader()).reader());
 
     var graph = try WeightedDigraph.init(allocator, 200);
-    var iter = FileLineIterator(@TypeOf(reader)).init(allocator, reader);
-    while (try iter.next()) |line| {
-        var tail: u32 = 0;
-        for (line) |word, n| {
-            if (n == 0) {
-                tail = try std.fmt.parseInt(u32, word, 10);
-            } else {
-                var parts = mem.split(u8, word, ",");
-                if (parts.next()) |str_head| {
-                    var head = try std.fmt.parseInt(u32, str_head, 10);
-                    if (parts.next()) |str_weight| {
-                        var weight = try std.fmt.parseInt(i32, str_weight, 10);
-                        //              print("{d} -> {d} [{d}]", .{ tail, head, weight });
-                        try graph.addEdge(head - 1, tail - 1, weight);
-                    }
-                }
-            }
-            allocator.free(word);
+    var tail: u32 = 0;
+    while (try iter.next()) |word| {
+        if (word.no == 0) {
+            tail = try parseInt(u32, word.str, 10);
+            continue;
         }
-        allocator.free(line);
+        var parts = mem.split(u8, word.str, ",");
+        if (parts.next()) |str_head| {
+            var head = try std.fmt.parseInt(u32, str_head, 10);
+            if (parts.next()) |str_weight| {
+                var weight = try std.fmt.parseInt(i32, str_weight, 10);
+                try graph.addEdge(tail - 1, head - 1, weight);
+            }
+        }
     }
+    return graph;
+}
+
+pub fn readKosrajuFile(allocator: Allocator, path: []const u8) !Digraph {
+    var file = try fs.openFileAbsolute(path, .{});
+    defer file.close();
+    var iter = wordIterator(io.bufferedReader(file.reader()).reader());
+
+    var graph = try Digraph.init(allocator);
+    var tail: u32 = 0;
+    var max_v: u32 = 0;
+    while (try iter.next()) |word| {
+        assert(word.no < 2);
+        if (word.no == 0) {
+            tail = try parseInt(u32, word.str, 10);
+            continue;
+        }
+        var head = try parseInt(u32, word.str, 10);
+        try graph.addEdge(tail - 1, head - 1);
+        max_v = max(max_v, max(head, tail));
+    }
+    graph.v = max_v;
     return graph;
 }
 
@@ -199,4 +222,32 @@ test "read dijkstra file" {
     edge = edges[3];
     try testing.expectEqual(edge.head, 58);
     try testing.expectEqual(edge.weight, 23);
+}
+
+test "read kosraju file" {
+    const allocator = testing.allocator;
+    var dg = try readKosrajuFile(allocator, srcDir() ++ "/../testdata/stanford-algs/testCases/course2/assignment1SCC/input_mostlyCycles_1_8.txt");
+    defer dg.deinit();
+
+    try testing.expectEqual(dg.vertices(), 8);
+    try testing.expectEqual(dg.edges(), 8);
+
+    var str = ArrayList(u8).init(allocator);
+    defer str.deinit();
+    try dg.dot(str.writer());
+    const expected =
+        \\digraph G {
+        \\  0 -> 1;
+        \\  1 -> 7;
+        \\  2 -> 0;
+        \\  3 -> 6;
+        \\  4 -> 5;
+        \\  5 -> 4;
+        \\  6 -> 3;
+        \\  7 -> 2;
+        \\}
+        \\
+    ;
+    try testing.expectEqualStrings(expected, str.items);
+    //try dg.dot(stdout);
 }

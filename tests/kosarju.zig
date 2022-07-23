@@ -14,11 +14,12 @@ pub fn main() !void {
     defer iter.deinit();
     while (iter.next()) |fns| {
         print("{s}  ", .{fns.input});
-        //print("filename3: {s} {s}\n", .{ fns.input, fns.output });
 
-        var dg = try graph.Digraph.init(allocator);
-        try dg.read(dir, fns.input, .{ .base = .one });
+        const path = try std.fs.path.join(allocator, &[_][]const u8{ dir, fns.input });
+        defer allocator.free(path);
+        var dg = try standford.readKosrajuFile(allocator, path);
         defer dg.deinit();
+
         var actual = try graph.sccSizes(allocator, &dg);
         defer allocator.free(actual);
 

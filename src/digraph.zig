@@ -75,7 +75,7 @@ pub const Digraph = struct {
                     tail.? -= 1;
                     head.? -= 1;
                 }
-                try self.addEdge(head.?, tail.?);
+                try self.addEdge(tail.?, head.?);
                 if (self.v == 0) {
                     max_v = std.math.max(max_v, std.math.max(head.?, tail.?));
                 }
@@ -103,16 +103,16 @@ pub const Digraph = struct {
         while (iterator.next()) |entry| {
             var tail = entry.key_ptr.*;
             for (entry.value_ptr.items) |head| {
-                try r.addEdge(tail, head);
+                try r.addEdge(head, tail);
             }
         }
         r.v = self.v;
         return r;
     }
 
-    pub fn hasEdge(self: *Self, head: u32, tail: u32) bool {
-        for (self.adjacent(head)) |v| {
-            if (v == tail) {
+    pub fn hasEdge(self: *Self, tail: u32, head: u32) bool {
+        for (self.adjacent(tail)) |v| {
+            if (v == head) {
                 return true;
             }
         }
@@ -139,7 +139,7 @@ pub const Digraph = struct {
         _ = try writer.write("}\n");
     }
 
-    fn addEdge(self: *Self, head: u32, tail: u32) !void {
+    pub fn addEdge(self: *Self, tail: u32, head: u32) !void {
         if (self.adj.getPtr(tail)) |l| {
             try l.append(head);
         } else {
@@ -369,7 +369,7 @@ pub const WeightedDigraph = struct {
         _ = try writer.write("}\n");
     }
 
-    pub fn addEdge(self: *Self, head: u32, tail: u32, weight: i32) !void {
+    pub fn addEdge(self: *Self, tail: u32, head: u32, weight: i32) !void {
         const e = WeightedEdge{
             .head = head,
             .tail = tail,
