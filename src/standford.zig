@@ -96,57 +96,63 @@ pub fn FileLineIterator(comptime ReaderType: type) type {
     return struct {
         const Self = @This();
 
-        allocator: Allocator,
         reader: ReaderType,
+        line: ArrayList([]const u8),
+        word: ArrayList(u8),
 
         pub fn init(allocator: Allocator, reader: ReaderType) Self {
             return .{
-                .allocator = allocator,
                 .reader = reader,
+                .line = ArrayList([]const u8).init(allocator),
+                .word = ArrayList(u8).init(allocator),
             };
         }
 
         pub fn next(self: *Self) !?[]const []const u8 {
-            var line = ArrayList([]const u8).init(self.allocator);
-            defer line.deinit();
-            var n: u32 = 0;
-            var buf: [128]u8 = undefined;
+            errdefer self.deinit();
             while (self.reader.readByte() catch null) |chr| {
-                if (chr == 32 or chr == 9 or chr == 10) {
-                    if (n > 0) {
-                        var str = try self.allocator.alloc(u8, n);
-                        std.mem.copy(u8, str, buf[0..n]);
-                        try line.append(str);
-                        n = 0;
+                if (std.ascii.isSpace(chr)) {
+                    // end of word
+                    if (self.word.items.len > 0) {
+                        try self.line.append(self.word.toOwnedSlice());
                     }
-                    if (chr == 10) {
-                        return line.toOwnedSlice();
+                    if (chr == '\n') {
+                        // end of line
+                        return self.line.toOwnedSlice();
                     }
+                    continue;
                 }
-                if (chr > 32) {
-                    buf[n] = chr;
-                    n += 1;
+                if (std.ascii.isPrint(chr)) {
+                    try self.word.append(chr);
                 }
             }
             return null;
         }
+
+        pub fn deinit(self: *Self) void {
+            for (self.line.items) |w| {
+                self.word.allocator.free(w);
+            }
+            self.word.deinit();
+            self.line.deinit();
+        }
     };
 }
 
-pub fn readDijkstraFile(allocator: Allocator, path: []const u8, filename: []const u8) !WeightedDigraph {
-    var dir = try std.fs.cwd().openDir(path, .{});
-    var file = try dir.openFile(filename, .{});
+pub fn readDijkstraFile(allocator: Allocator, path: []const u8) !WeightedDigraph {
+    var file = try std.fs.openFileAbsolute(path, .{});
     defer file.close();
-    const stream = std.io.bufferedReader(file.reader()).reader();
+    const reader = std.io.bufferedReader(file.reader()).reader();
+
     var graph = try WeightedDigraph.init(allocator, 200);
-    var iter = FileLineIterator(@TypeOf(stream)).init(allocator, stream);
+    var iter = FileLineIterator(@TypeOf(reader)).init(allocator, reader);
     while (try iter.next()) |line| {
         var tail: u32 = 0;
-        for (line) |str, n| {
+        for (line) |word, n| {
             if (n == 0) {
-                tail = try std.fmt.parseInt(u32, str, 10);
+                tail = try std.fmt.parseInt(u32, word, 10);
             } else {
-                var parts = mem.split(u8, str, ",");
+                var parts = mem.split(u8, word, ",");
                 if (parts.next()) |str_head| {
                     var head = try std.fmt.parseInt(u32, str_head, 10);
                     if (parts.next()) |str_weight| {
@@ -156,7 +162,7 @@ pub fn readDijkstraFile(allocator: Allocator, path: []const u8, filename: []cons
                     }
                 }
             }
-            allocator.free(str);
+            allocator.free(word);
         }
         allocator.free(line);
     }
@@ -182,7 +188,7 @@ test "read dijkstra file" {
     const path = srcDir() ++ "/../testdata/stanford-algs/testCases/course2/assignment2Dijkstra";
     const filename = "input_random_1_4.txt";
 
-    var graph = try readDijkstraFile(allocator, path, filename);
+    var graph = try readDijkstraFile(allocator, path ++ "/" ++ filename);
     defer graph.deinit();
 
     var edges = graph.adjacent(190);
